@@ -5,6 +5,7 @@ require("dotenv").config({
 const express = require("express");
 const cors = require("cors");
 const userRoutes = require("./routes/userRoutes");
+const credentialRoutes = require("./routes/credentialRoutes");
 
 const app = express();
 const connectDB = require("./config/database");
@@ -12,7 +13,7 @@ const connectDB = require("./config/database");
 connectDB();
 
 const corsOptions = {
-  origin: ["https://teater.arkiva.gov.al", "http://localhost:3000"],
+  origin: ["https://konfigurime.arkiva.gov.al", "http://localhost:3000"],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -26,6 +27,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api", userRoutes);
+app.use("/credentials", credentialRoutes);
 const PORT = process.env.PORT || 3109;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on port ${PORT}`);
