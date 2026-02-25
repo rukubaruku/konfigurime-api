@@ -6,8 +6,10 @@ const express = require("express");
 const cors = require("cors");
 const userRoutes = require("./routes/userRoutes");
 const credentialRoutes = require("./routes/credentialRoutes");
+const helmet = require("helmet");
 
 const app = express();
+app.use(helmet());
 const connectDB = require("./config/database");
 
 connectDB();
