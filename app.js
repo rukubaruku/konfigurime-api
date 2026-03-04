@@ -6,6 +6,8 @@ const express = require("express");
 const cors = require("cors");
 const userRoutes = require("./routes/userRoutes");
 const credentialRoutes = require("./routes/credentialRoutes");
+const categoryRoutes = require("./routes/categoryRoutes");
+const moduleRoutes = require("./routes/moduleRoutes");
 const helmet = require("helmet");
 
 const app = express();
@@ -28,8 +30,10 @@ app.get("/", (req, res) => {
   res.send("This is working");
 });
 
-app.use("/api", userRoutes);
+app.use("/user", userRoutes);
 app.use("/credentials", credentialRoutes);
+app.use("/category", categoryRoutes);
+app.use("/module", moduleRoutes);
 const PORT = process.env.PORT || 3109;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on port ${PORT}`);

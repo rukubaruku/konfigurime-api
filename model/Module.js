@@ -1,3 +1,5 @@
+const mongoose = require("mongoose");
+
 const moduleSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, unique: true },
@@ -5,4 +7,4 @@ const moduleSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-export default mongoose.model("Module", moduleSchema);
+module.exports = mongoose.model("Module", moduleSchema);
