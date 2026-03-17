@@ -111,3 +111,42 @@ exports.deleteCategory = async (req, res) => {
     });
   }
 };
+
+exports.getCategoriesByModule = async (req, res) => {
+  try {
+    const { module } = req.body;
+
+    if (!module) {
+      return res.status(400).json({
+        success: false,
+        message: "Module name is required",
+      });
+    }
+
+    const moduleDoc = await Module.findOne({ name: module });
+
+    if (!moduleDoc) {
+      return res.status(404).json({
+        success: false,
+        message: "Module not found",
+      });
+    }
+
+    const categories = await Category.find({ module: moduleDoc._id }).populate(
+      "module",
+      "name",
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Categories fetched successfully",
+      data: categories,
+    });
+  } catch (error) {
+    console.error("Error fetching categories by module:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch categories",
+    });
+  }
+};
