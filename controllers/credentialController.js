@@ -81,7 +81,7 @@ exports.getCredentialPassword = async (req, res) => {
 
 exports.addCredential = async (req, res) => {
   try {
-    const { category, username, password, url, title, note } = req.body;
+    const { category, username, password, url, title } = req.body;
 
     if (!category || !title) {
       return res.status(400).json({
@@ -96,7 +96,6 @@ exports.addCredential = async (req, res) => {
       password,
       url,
       title,
-      note,
     });
 
     res.status(201).json({
@@ -154,7 +153,7 @@ exports.getEditingCredential = async (req, res) => {
 exports.updateCredential = async (req, res) => {
   try {
     const { id } = req.params;
-    const { category, username, password, url, title, note } = req.body;
+    const { category, username, password, url, title } = req.body;
 
     if (!id) {
       return res.status(400).json({
@@ -183,7 +182,6 @@ exports.updateCredential = async (req, res) => {
     credential.username = username;
     credential.url = url;
     credential.title = title;
-    credential.note = note;
 
     if (password && password.trim() !== "") {
       credential.password = password;

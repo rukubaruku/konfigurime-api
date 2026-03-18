@@ -8,7 +8,6 @@ const credentialSchema = new mongoose.Schema(
     username: { type: String, default: "" },
     password: { type: String, default: "" },
     url: { type: String, default: "" },
-    note: { type: String, default: "" },
     time: { type: String, default: "" },
   },
   { timestamps: true },

@@ -6,6 +6,7 @@ const express = require("express");
 const cors = require("cors");
 const userRoutes = require("./routes/userRoutes");
 const credentialRoutes = require("./routes/credentialRoutes");
+const scriptRoutes = require("./routes/scriptRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const moduleRoutes = require("./routes/moduleRoutes");
 const helmet = require("helmet");
@@ -32,6 +33,7 @@ app.get("/", (req, res) => {
 
 app.use("/user", userRoutes);
 app.use("/credentials", credentialRoutes);
+app.use("/scripts", scriptRoutes);
 app.use("/category", categoryRoutes);
 app.use("/module", moduleRoutes);
 const PORT = process.env.PORT || 3109;
