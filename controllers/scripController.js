@@ -1,5 +1,25 @@
 const Script = require("../model/Script");
 
+exports.getDashboardScripts = async (req, res) => {
+  try {
+    const [count] = await Promise.all([Script.countDocuments()]);
+
+    return res.status(200).json({
+      status: 200,
+      message: "Dashboard scripts count retrieved successfully",
+      data: {
+        count,
+      },
+    });
+  } catch (error) {
+    console.error("DASHBOARD ERROR:", error);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal server error",
+    });
+  }
+};
+
 exports.getScriptsByCategory = async (req, res) => {
   try {
     const { categoryId } = req.params;
