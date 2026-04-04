@@ -15,9 +15,11 @@ const FondRoutes = require("./routes/fondRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const moduleRoutes = require("./routes/moduleRoutes");
 const helmet = require("helmet");
+const cookieParser = require("cookie-parser");
 
 const app = express();
 app.use(helmet());
+app.use(cookieParser());
 const connectDB = require("./config/database");
 
 connectDB();

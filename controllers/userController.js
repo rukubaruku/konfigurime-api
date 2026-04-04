@@ -2,45 +2,116 @@ const User = require("../model/User");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
+const generateAccessToken = (user) => {
+  return jwt.sign({ id: user._id, name: user.name }, process.env.JWT_SECRET, {
+    expiresIn: "15m",
+  });
+};
+
+const generateRefreshToken = (user) => {
+  return jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: "7d",
+  });
+};
+
 exports.login = async (req, res) => {
   const { email, password } = req.body;
+
   if (!email || !password) {
-    return res
-      .status(400)
-      .json({ success: false, message: "Email and password are required" });
+    return res.status(400).json({
+      success: false,
+      message: "Email and password are required",
+    });
   }
+
   try {
     const user = await User.findOne({ email });
+
     if (!user) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Incorrect credentials" });
-    }
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Incorrect credentials" });
-    }
-    const token = jwt.sign(
-      { id: user._id, name: user.name },
-      process.env.JWT_SECRET,
-      { expiresIn: "2m" },
-    );
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "Login successful",
-        token,
-        user: { id: user._id, name: user.name, email: user.email },
+      return res.status(401).json({
+        success: false,
+        message: "Incorrect credentials",
       });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Incorrect credentials",
+      });
+    }
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+
+    return res.status(200).json({
+      success: true,
+      token: accessToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+      },
+    });
   } catch (error) {
     console.error(error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Internal server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
+};
+
+exports.refreshToken = (req, res) => {
+  const token = req.cookies.refreshToken;
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: "No refresh token",
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+
+    const newAccessToken = jwt.sign(
+      { id: decoded.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" },
+    );
+
+    return res.status(200).json({
+      success: true,
+      token: newAccessToken,
+    });
+  } catch (err) {
+    return res.status(403).json({
+      success: false,
+      message: "Invalid refresh token",
+    });
+  }
+};
+
+exports.logout = (req, res) => {
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "Logged out",
+  });
 };
 
 exports.getUserById = async (req, res) => {
