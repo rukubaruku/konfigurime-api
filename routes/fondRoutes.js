@@ -4,5 +4,6 @@ const router = express.Router();
 
 router.get("/search", fondController.searchFond);
 router.post("/import", fondController.importFondet);
+router.get("/import-status", fondController.getImportStatus);
 
 module.exports = router;

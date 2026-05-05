@@ -20,19 +20,16 @@ exports.searchFond = async (req, res) => {
     if (file) exactFilter.file = file;
 
     const exactMatches = await Fond.find(exactFilter).limit(100);
-
     let results = [...exactMatches];
 
     if (results.length < 100) {
       const fuzzyFilter = { $and: [] };
-
       if (fond)
         fuzzyFilter.$and.push({ fond: { $regex: fond, $options: "i" } });
       if (year)
         fuzzyFilter.$and.push({ year: { $regex: year, $options: "i" } });
       if (file)
         fuzzyFilter.$and.push({ file: { $regex: `^${file}$`, $options: "" } });
-
       if (exactMatches.length) {
         fuzzyFilter._id = { $nin: exactMatches.map((item) => item._id) };
       }
@@ -50,86 +47,111 @@ exports.searchFond = async (req, res) => {
   }
 };
 
+// In-memory import status tracker
+const importStatus = {
+  running: false,
+  done: false,
+  total: 0,
+  inserted: 0,
+  skipped: 0,
+  error: null,
+};
+
 exports.importFondet = async (req, res) => {
+  if (importStatus.running) {
+    return res.json({
+      success: true,
+      status: "running",
+      message:
+        "Import already in progress. Poll /fondet/import-status for updates.",
+    });
+  }
+
   const filePath = path.join(__dirname, "../Fondet e skanuara.txt");
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({
       success: false,
-      message: "File 'Fondet e skanuara.txt' not found in root directory.",
+      message: "File 'Fondet e skanuara.txt' not found in project root.",
     });
   }
 
-  try {
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const lines = raw
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
+  // Respond immediately so Cloudflare doesn't time out
+  res.json({
+    success: true,
+    status: "started",
+    message:
+      "Import started in background. Poll /fondet/import-status for progress.",
+  });
 
-    const docs = [];
+  // Reset status
+  importStatus.running = true;
+  importStatus.done = false;
+  importStatus.error = null;
+  importStatus.total = 0;
+  importStatus.inserted = 0;
+  importStatus.skipped = 0;
 
-    for (const line of lines) {
-      const normalized = line
-        .replace(/^[A-Za-z]:[/\\]/, "")
-        .replace(/[/\\]+$/, "")
-        .trim();
+  // Run in background (no await on purpose)
+  (async () => {
+    try {
+      const raw = fs.readFileSync(filePath, "utf-8");
+      const lines = raw
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
 
-      if (!normalized) continue;
+      const docs = [];
+      for (const line of lines) {
+        const normalized = line
+          .replace(/^[A-Za-z]:[/\\]/, "")
+          .replace(/[/\\]+$/, "")
+          .trim();
+        if (!normalized) continue;
 
-      const parts = normalized.split(/[/\\]/);
+        const parts = normalized.split(/[/\\]/);
+        docs.push({
+          fullPath: normalized,
+          level1: parts[0] || null,
+          date: parts[1] || null,
+          fond: parts[2] || null,
+          year: parts[3] || null,
+          file: parts[4] || null,
+        });
+      }
 
-      const level1 = parts[0] || null;
-      const date = parts[1] || null;
-      const fond = parts[2] || null;
-      const year = parts[3] || null;
-      const file = parts[4] || null;
+      importStatus.total = docs.length;
 
-      docs.push({
-        fullPath: normalized,
-        level1,
-        date,
-        fond,
-        year,
-        file,
-      });
+      // Process in batches of 500 to avoid memory spikes
+      const BATCH_SIZE = 500;
+      let inserted = 0;
+
+      for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+        const batch = docs.slice(i, i + BATCH_SIZE);
+        const bulkOps = batch.map((doc) => ({
+          updateOne: {
+            filter: { fullPath: doc.fullPath },
+            update: { $setOnInsert: doc },
+            upsert: true,
+          },
+        }));
+        const result = await Fond.bulkWrite(bulkOps, { ordered: false });
+        inserted += result.upsertedCount || 0;
+      }
+
+      importStatus.inserted = inserted;
+      importStatus.skipped = docs.length - inserted;
+      importStatus.done = true;
+    } catch (err) {
+      console.error("Import error:", err);
+      importStatus.error = err.message;
+      importStatus.done = true;
+    } finally {
+      importStatus.running = false;
     }
+  })();
+};
 
-    if (docs.length === 0) {
-      return res.json({
-        success: true,
-        inserted: 0,
-        skipped: 0,
-        message: "No valid lines found.",
-      });
-    }
-
-    let inserted = 0;
-    let skipped = 0;
-
-    const bulkOps = docs.map((doc) => ({
-      updateOne: {
-        filter: { fullPath: doc.fullPath },
-        update: { $setOnInsert: doc },
-        upsert: true,
-      },
-    }));
-
-    const result = await Fond.bulkWrite(bulkOps, { ordered: false });
-    inserted = result.upsertedCount || 0;
-    skipped = docs.length - inserted;
-
-    return res.json({
-      success: true,
-      total: docs.length,
-      inserted,
-      skipped,
-      message: `Import complete. ${inserted} new records inserted, ${skipped} already existed.`,
-    });
-  } catch (err) {
-    console.error("Import error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "Server error during import." });
-  }
+exports.getImportStatus = (req, res) => {
+  res.json({ success: true, ...importStatus });
 };
