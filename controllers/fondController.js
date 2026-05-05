@@ -51,7 +51,7 @@ exports.searchFond = async (req, res) => {
 };
 
 exports.importFondet = async (req, res) => {
-  const filePath = path.join(__dirname, "../../Fondet e skanuara.txt");
+  const filePath = path.join(__dirname, "../Fondet e skanuara.txt");
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({
