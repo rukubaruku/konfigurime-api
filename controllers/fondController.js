@@ -1,4 +1,6 @@
 const Fond = require("../model/Fond");
+const fs = require("fs");
+const path = require("path");
 
 exports.searchFond = async (req, res) => {
   let { fond, year, file } = req.query;
@@ -45,5 +47,89 @@ exports.searchFond = async (req, res) => {
   } catch (err) {
     console.error("Fondet search error:", err);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.importFondet = async (req, res) => {
+  const filePath = path.join(__dirname, "../../Fondet e skanuara.txt");
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({
+      success: false,
+      message: "File 'Fondet e skanuara.txt' not found in root directory.",
+    });
+  }
+
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const lines = raw
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const docs = [];
+
+    for (const line of lines) {
+      const normalized = line
+        .replace(/^[A-Za-z]:[/\\]/, "")
+        .replace(/[/\\]+$/, "")
+        .trim();
+
+      if (!normalized) continue;
+
+      const parts = normalized.split(/[/\\]/);
+
+      const level1 = parts[0] || null;
+      const date = parts[1] || null;
+      const fond = parts[2] || null;
+      const year = parts[3] || null;
+      const file = parts[4] || null;
+
+      docs.push({
+        fullPath: normalized,
+        level1,
+        date,
+        fond,
+        year,
+        file,
+      });
+    }
+
+    if (docs.length === 0) {
+      return res.json({
+        success: true,
+        inserted: 0,
+        skipped: 0,
+        message: "No valid lines found.",
+      });
+    }
+
+    let inserted = 0;
+    let skipped = 0;
+
+    const bulkOps = docs.map((doc) => ({
+      updateOne: {
+        filter: { fullPath: doc.fullPath },
+        update: { $setOnInsert: doc },
+        upsert: true,
+      },
+    }));
+
+    const result = await Fond.bulkWrite(bulkOps, { ordered: false });
+    inserted = result.upsertedCount || 0;
+    skipped = docs.length - inserted;
+
+    return res.json({
+      success: true,
+      total: docs.length,
+      inserted,
+      skipped,
+      message: `Import complete. ${inserted} new records inserted, ${skipped} already existed.`,
+    });
+  } catch (err) {
+    console.error("Import error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error during import." });
   }
 };
