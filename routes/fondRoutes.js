@@ -3,6 +3,6 @@ const fondController = require("../controllers/fondController");
 const router = express.Router();
 
 router.get("/search", fondController.searchFond);
-router.post("/import", importFondet);
+router.post("/import", fondController.importFondet);
 
 module.exports = router;
