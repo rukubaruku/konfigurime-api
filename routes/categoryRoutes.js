@@ -5,6 +5,7 @@ const categoriesController = require("../controllers/categoriesController");
 router.get("/categories", categoriesController.getAllCategories);
 router.post("/", categoriesController.createCategory);
 router.post("/module", categoriesController.getCategoriesByModule);
+router.put("/reorder/categories", categoriesController.reorderCategories);
 router.put("/:id", categoriesController.updateCategory);
 router.delete("/:id", categoriesController.deleteCategory);
 
