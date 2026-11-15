@@ -2,6 +2,7 @@ const fs = require("fs");
 const readline = require("readline");
 const mongoose = require("mongoose");
 const Fond = require("./model/Fond");
+const { parseFondPath } = require("./utils/fondParser");
 require("dotenv").config({
   path: `.env.${process.env.NODE_ENV || "development"}`,
 });
@@ -32,20 +33,14 @@ async function importFile() {
     const trimmedLine = line.trim();
     if (!trimmedLine) continue;
 
-    const parts = trimmedLine.split("\\").map((p) => p.trim());
-    const date = parts[2] || "";
-    const fond = parts[3] || "";
-    const year = parts[4] || "";
-    const file = parts[5] || "";
+    const doc = parseFondPath(trimmedLine);
+    if (!doc) continue;
 
-    // prepare upsert operation
     batch.push({
       updateOne: {
-        filter: { fullPath: trimmedLine }, // check if already exists
-        update: {
-          $setOnInsert: { fullPath: trimmedLine, date, fond, year, file },
-        },
-        upsert: true, // insert only if not exists
+        filter: { fullPath: doc.fullPath },
+        update: { $set: doc },
+        upsert: true,
       },
     });
 
