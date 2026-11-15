@@ -30,7 +30,13 @@ const oldKey = process.env.VAULT_SECRET_OLD
   ? deriveKey(process.env.VAULT_SECRET_OLD)
   : null;
 
+// GCM is authenticated, so a wrong key always fails and the order does not
+// matter. Legacy CBC data was written before any key rotation, so the old key
+// is tried first for it.
 const decryptionKeys = oldKey ? [currentKey, oldKey] : [currentKey];
+const legacyDecryptionKeys = oldKey ? [oldKey, currentKey] : [currentKey];
+
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
 
 function isEncrypted(value) {
   return typeof value === "string" && value.startsWith(PREFIX);
@@ -76,15 +82,18 @@ function decryptLegacyCbc(value, key) {
     key,
     Buffer.from(ivHex, "hex"),
   );
-  return Buffer.concat([
+  const plain = Buffer.concat([
     decipher.update(Buffer.from(dataHex, "hex")),
     decipher.final(),
-  ]).toString("utf8");
+  ]);
+  // CBC has no integrity check: a wrong key "succeeds" about 1 time in 256
+  // and returns garbage. Garbage is almost never valid UTF-8, so reject it.
+  return strictUtf8.decode(plain);
 }
 
-function tryKeys(fn, value) {
+function tryKeys(fn, value, keys = decryptionKeys) {
   let lastError;
-  for (const key of decryptionKeys) {
+  for (const key of keys) {
     try {
       return fn(value, key);
     } catch (err) {
@@ -102,7 +111,8 @@ function tryKeys(fn, value) {
 function decrypt(value) {
   if (value === undefined || value === null || value === "") return value;
   if (isEncrypted(value)) return tryKeys(decryptGcm, value);
-  if (isLegacyEncrypted(value)) return tryKeys(decryptLegacyCbc, value);
+  if (isLegacyEncrypted(value))
+    return tryKeys(decryptLegacyCbc, value, legacyDecryptionKeys);
   return value;
 }
 
