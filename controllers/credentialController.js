@@ -1,6 +1,4 @@
 const Credential = require("../model/Credential");
-const { decrypt } = require("../utils/crypto");
-const { encrypt } = require("../utils/crypto");
 
 exports.getDashboardCredentials = async (req, res) => {
   try {
@@ -101,10 +99,7 @@ exports.addCredential = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Credential added successfully",
-      data: {
-        ...newCredential.toObject(),
-        password: undefined,
-      },
+      data: newCredential.toSafeObject(),
     });
   } catch (error) {
     console.error("Error creating credential:", error);
@@ -189,8 +184,7 @@ exports.updateCredential = async (req, res) => {
 
     await credential.save();
 
-    const updated = credential.toObject();
-    delete updated.password;
+    const updated = credential.toSafeObject();
 
     return res.status(200).json({
       success: true,
