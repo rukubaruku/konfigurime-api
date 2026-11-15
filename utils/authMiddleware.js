@@ -1,24 +1,47 @@
-const jwt = require("jsonwebtoken");
+const User = require("../model/User");
+const { verifyAccessToken } = require("./tokens");
 
-exports.verifyToken = (req, res, next) => {
-  const authHeader = req.headers.authorization;
+/**
+ * Requires a valid access token (Authorization: Bearer <token>) belonging to
+ * an existing user whose sessions have not been revoked.
+ */
+exports.verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization || "";
+  const [scheme, token] = authHeader.split(" ");
 
-  if (!authHeader)
+  if (scheme !== "Bearer" || !token) {
     return res.status(401).json({
       success: false,
       message: "No token provided",
     });
+  }
 
-  const token = authHeader.split(" ")[1];
-
+  let decoded;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
+    decoded = verifyAccessToken(token);
   } catch (err) {
     return res.status(401).json({
       success: false,
       message: "Session expired. Please login again.",
+    });
+  }
+
+  try {
+    const user = await User.findById(decoded.id).select("name tokenVersion");
+    if (!user || (user.tokenVersion || 0) !== (decoded.tv || 0)) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired. Please login again.",
+      });
+    }
+
+    req.user = { id: String(user._id), name: user.name };
+    next();
+  } catch (err) {
+    console.error("Auth middleware error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
     });
   }
 };
