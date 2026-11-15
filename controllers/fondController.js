@@ -1,46 +1,54 @@
 const Fond = require("../model/Fond");
+const {
+  parseFondPath,
+  normalizeFond,
+  normalizeCode,
+} = require("../utils/fondParser");
 const fs = require("fs");
 const path = require("path");
 
-exports.searchFond = async (req, res) => {
-  let { fond, year, file } = req.query;
+const MAX_RESULTS = 500;
 
-  fond = fond?.trim();
-  year = year?.trim();
-  file = file?.trim();
+/**
+ * GET /fondet/search?fond=1018&year=2015&file=857
+ * Each field is an exact match ("1018" finds F.1018, not F.10180). Empty
+ * fields match anything, so fond=1018&file=857 finds F.1018\<any>\857.
+ */
+exports.searchFond = async (req, res) => {
+  const fond = normalizeFond(req.query.fond);
+  const year = normalizeCode(req.query.year);
+  const file = normalizeCode(req.query.file);
 
   if (!fond && !year && !file) {
-    return res.json({ success: true, data: [] });
+    return res.json({ success: true, data: [], total: 0 });
   }
 
   try {
-    const exactFilter = {};
-    if (fond) exactFilter.fond = fond;
-    if (year) exactFilter.year = year;
-    if (file) exactFilter.file = file;
+    const filter = {};
+    if (fond) filter.fondCode = fond;
+    if (year) filter.yearCode = year;
+    if (file) filter.fileCode = file;
 
-    const exactMatches = await Fond.find(exactFilter).limit(100);
-    let results = [...exactMatches];
-
-    if (results.length < 100) {
-      const fuzzyFilter = { $and: [] };
-      if (fond)
-        fuzzyFilter.$and.push({ fond: { $regex: fond, $options: "i" } });
-      if (year)
-        fuzzyFilter.$and.push({ year: { $regex: year, $options: "i" } });
-      if (file)
-        fuzzyFilter.$and.push({ file: { $regex: `^${file}$`, $options: "" } });
-      if (exactMatches.length) {
-        fuzzyFilter._id = { $nin: exactMatches.map((item) => item._id) };
-      }
-
-      const fuzzyMatches = await Fond.find(fuzzyFilter).limit(
-        100 - results.length,
-      );
-      results = [...results, ...fuzzyMatches];
+    // Prefer the deepest entries (fond\year\file); parent folders such as
+    // "F.1018" or "F.1018\2015" are only shown when nothing deeper exists.
+    let query = { ...filter, fileCode: file || { $ne: null } };
+    let total = await Fond.countDocuments(query);
+    if (total === 0 && !file) {
+      query = filter;
+      total = await Fond.countDocuments(query);
     }
 
-    res.json({ success: true, data: results });
+    const data = await Fond.find(query)
+      .select(
+        "fullPath location scanDate recycled fond year file fondCode yearCode fileCode",
+      )
+      .collation({ locale: "en", numericOrdering: true })
+      .sort({ recycled: 1, fondCode: 1, yearCode: 1, fileCode: 1, fullPath: 1 })
+      .limit(MAX_RESULTS)
+      .allowDiskUse(true)
+      .lean();
+
+    res.json({ success: true, data, total, limit: MAX_RESULTS });
   } catch (err) {
     console.error("Fondet search error:", err);
     res.status(500).json({ success: false, message: "Server error" });
@@ -101,24 +109,10 @@ exports.importFondet = async (req, res) => {
         .map((l) => l.trim())
         .filter(Boolean);
 
-      const docs = [];
-      for (const line of lines) {
-        const normalized = line
-          .replace(/^[A-Za-z]:[/\\]/, "")
-          .replace(/[/\\]+$/, "")
-          .trim();
-        if (!normalized) continue;
-
-        const parts = normalized.split(/[/\\]/);
-        docs.push({
-          fullPath: normalized,
-          level1: parts[0] || null,
-          date: parts[1] || null,
-          fond: parts[2] || null,
-          year: parts[3] || null,
-          file: parts[4] || null,
-        });
-      }
+      // This importer has always stored paths without the drive letter.
+      const docs = lines
+        .map((line) => parseFondPath(line.replace(/^[A-Za-z]:[/\\]/, "")))
+        .filter(Boolean);
 
       importStatus.total = docs.length;
 
@@ -131,7 +125,8 @@ exports.importFondet = async (req, res) => {
         const bulkOps = batch.map((doc) => ({
           updateOne: {
             filter: { fullPath: doc.fullPath },
-            update: { $setOnInsert: doc },
+            // $set so re-importing also refreshes the parsed fields
+            update: { $set: doc },
             upsert: true,
           },
         }));
